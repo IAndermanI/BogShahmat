@@ -1,6 +1,7 @@
 // DISCLAIMER
+//
 // Property of IAndermanI.
-// Creator using Windows x64. This may work not as expected on other architectures.
+// Creator used Windows x86-64. This may work not as expected on other architectures.
 // If this program lost your ELO, this is not the fault of mine :).
 //
 // DESCRIPTION
@@ -43,11 +44,9 @@
 //
 //
 
-#include <iostream>
-#include <cstdint>
-#include <bitset>
-#include <vector>
+#include <bits/stdc++.h>
 #include <windows.h>
+#include <x86intrin.h>
 
 using namespace std;
 #define get_bit(bitboard, square) ((bitboard) & (1ULL << square))
@@ -70,14 +69,14 @@ enum {
     a8, b8, c8, d8, e8, f8, g8, h8, empty_square
 };
 int rotated_board[64] = {
-    a8, b8, c8, d8, e8, f8, g8, h8,
-    a7, b7, c7, d7, e7, f7, g7, h7,
-    a6, b6, c6, d6, e6, f6, g6, h6,
-    a5, b5, c5, d5, e5, f5, g5, h5,
-    a4, b4, c4, d4, e4, f4, g4, h4,
-    a3, b3, c3, d3, e3, f3, g3, h3,
-    a2, b2, c2, d2, e2, f2, g2, h2,
-    a1, b1, c1, d1, e1, f1, g1, h1
+        a8, b8, c8, d8, e8, f8, g8, h8,
+        a7, b7, c7, d7, e7, f7, g7, h7,
+        a6, b6, c6, d6, e6, f6, g6, h6,
+        a5, b5, c5, d5, e5, f5, g5, h5,
+        a4, b4, c4, d4, e4, f4, g4, h4,
+        a3, b3, c3, d3, e3, f3, g3, h3,
+        a2, b2, c2, d2, e2, f2, g2, h2,
+        a1, b1, c1, d1, e1, f1, g1, h1
 };
 u64 not_a_file = 0xfefefefefefefefe;
 u64 a_file = ~not_a_file;
@@ -86,6 +85,8 @@ u64 not_h_file = 0x7f7f7f7f7f7f7f7f;
 u64 h_file = ~not_h_file;
 u64 not_g_file = 0xbfbfbfbfbfbfbfbf;
 u64 g_file = ~not_g_file;
+u64 not_1_row = 0xffffffffffffff00;
+u64 not_8_row = 0x00ffffffffffffff;
 
 
 // White pawns, knights, bishops, rooks, queen and king. Then black in the same order.
@@ -112,7 +113,7 @@ enum {
     wk = 1, wq = 2, bk = 4, bq = 8
 };
 int castle = 0;
-
+u64 hash_key = 0ULL;
 
 // To count possible moves amount for sliding attack pieces
 const int rook_bits[64] = {
@@ -151,67 +152,86 @@ const int castling_rights[64] = {
 
 // Evaluation array
 const int evaluation_array[12]{
-    100, 270, 290, 430, 890, 10000, -100, -270, -290, -430, -890, -10000
+        100, 270, 290, 430, 890, 10000, -100, -270, -290, -430, -890, -10000
 };
 
 // Increment to score of a pieces depends on a position (queen = rook + bishop)
 const int pawn_eval[64] = {
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, -10, -10, 0, 0, 0,
-    0, 0, 0, 5, 5, 0, 0, 0,
-    5, 5, 10, 20, 20, 5, 5, 5,
-    10, 10, 10, 20, 20, 10, 10, 10,
-    20, 20, 20, 30, 30, 30, 20, 20,
-    30, 30, 30, 40, 40, 30, 30, 30,
-    90, 90, 90, 90, 90, 90, 90, 90
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, -10, -10, 0, 0, 0,
+        0, 0, 0, 5, 5, 0, 0, 0,
+        5, 5, 10, 20, 20, 5, 5, 5,
+        10, 10, 10, 20, 20, 10, 10, 10,
+        20, 20, 20, 30, 30, 30, 20, 20,
+        30, 30, 30, 40, 40, 30, 30, 30,
+        90, 90, 90, 90, 90, 90, 90, 90
 };
 
 // knight positional score
 const int knight_eval[64] = {
-    -5, -10, 0, 0, 0, 0, -10, -5,
-    -5, 0, 0, 0, 0, 0, 0, -5,
-    -5, 5, 20, 10, 10, 20, 5, -5,
-    -5, 10, 20, 30, 30, 20, 10, -5,
-    -5, 10, 20, 30, 30, 20, 10, -5,
-    -5, 5, 20, 20, 20, 20, 5, -5,
-    -5, 0, 0, 10, 10, 0, 0, -5,
-    -5, 0, 0, 0, 0, 0, 0, -5
+        -5, -10, 0, 0, 0, 0, -10, -5,
+        -5, 0, 0, 0, 0, 0, 0, -5,
+        -5, 5, 20, 10, 10, 20, 5, -5,
+        -5, 10, 20, 30, 30, 20, 10, -5,
+        -5, 10, 20, 30, 30, 20, 10, -5,
+        -5, 5, 20, 20, 20, 20, 5, -5,
+        -5, 0, 0, 10, 10, 0, 0, -5,
+        -5, 0, 0, 0, 0, 0, 0, -5
 };
 
 // bishop positional score
 const int bishop_eval[64] = {
-    0, 0, -10, 0, 0, -10, 0, 0,
-    0, 30, 0, 0, 0, 0, 30, 0,
-    0, 10, 0, 0, 0, 0, 10, 0,
-    0, 0, 10, 20, 20, 10, 0, 0,
-    0, 0, 10, 20, 20, 10, 0, 0,
-    0, 0, 0, 10, 10, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, -10, 0, 0, -10, 0, 0,
+        0, 30, 0, 0, 0, 0, 30, 0,
+        0, 10, 0, 0, 0, 0, 10, 0,
+        0, 0, 10, 20, 20, 10, 0, 0,
+        0, 0, 10, 20, 20, 10, 0, 0,
+        0, 0, 0, 10, 10, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
 };
 
 // rook positional score
 const int rook_eval[64] = {
-    0, 0, 0, 20, 20, 0, 0, 0,
-    0, 0, 10, 20, 20, 10, 0, 0,
-    0, 0, 10, 20, 20, 10, 0, 0,
-    0, 0, 10, 20, 20, 10, 0, 0,
-    0, 0, 10, 20, 20, 10, 0, 0,
-    0, 0, 10, 20, 20, 10, 0, 0,
-    50, 50, 50, 50, 50, 50, 50, 50,
-    50, 50, 50, 50, 50, 50, 50, 50
+        0, 0, 0, 20, 20, 0, 0, 0,
+        0, 0, 10, 20, 20, 10, 0, 0,
+        0, 0, 10, 20, 20, 10, 0, 0,
+        0, 0, 10, 20, 20, 10, 0, 0,
+        0, 0, 10, 20, 20, 10, 0, 0,
+        0, 0, 10, 20, 20, 10, 0, 0,
+        50, 50, 50, 50, 50, 50, 50, 50,
+        50, 50, 50, 50, 50, 50, 50, 50
 };
 
 // king positional score
 const int king_eval[64] = {
-    0, 0, 5, -15, -15, 0, 10, 0,
-    0, 5, 5, -5, -5, 0, 5, 0,
-    0, 0, 5, 10, 10, 5, 0, 0,
-    0, 5, 10, 20, 20, 10, 5, 0,
-    0, 5, 10, 20, 20, 10, 5, 0,
-    0, 5, 5, 10, 10, 5, 5, 0,
-    0, 0, 5, 5, 5, 5, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 5, -15, -15, 0, 10, 0,
+        0, 5, 5, -5, -5, 0, 5, 0,
+        0, 0, 5, 10, 10, 5, 0, 0,
+        0, 5, 10, 20, 20, 10, 5, 0,
+        0, 5, 10, 20, 20, 10, 5, 0,
+        0, 5, 5, 10, 10, 5, 5, 0,
+        0, 0, 5, 5, 5, 5, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+};
+
+// Used to sort the move order
+// Most valuable victim and less valuable attacker [attacker][victim]
+// Example: mvv_lva[P][q] (55) > mvv_lva[N][q] (54) means that taking black queen with the pawn is better than with the knight
+
+const int mvv_lva[12][12] = {
+        15, 25, 35, 45, 55, 65, 15, 25, 35, 45, 55, 65,
+        14, 24, 34, 44, 54, 64, 14, 24, 34, 44, 54, 64,
+        13, 23, 33, 43, 53, 63, 13, 23, 33, 43, 53, 63,
+        12, 22, 32, 42, 52, 62, 12, 22, 32, 42, 52, 62,
+        11, 21, 31, 41, 51, 61, 11, 21, 31, 41, 51, 61,
+        10, 20, 30, 40, 50, 60, 10, 20, 30, 40, 50, 60,
+        15, 25, 35, 45, 55, 65, 15, 25, 35, 45, 55, 65,
+        14, 24, 34, 44, 54, 64, 14, 24, 34, 44, 54, 64,
+        13, 23, 33, 43, 53, 63, 13, 23, 33, 43, 53, 63,
+        12, 22, 32, 42, 52, 62, 12, 22, 32, 42, 52, 62,
+        11, 21, 31, 41, 51, 61, 11, 21, 31, 41, 51, 61,
+        10, 20, 30, 40, 50, 60, 10, 20, 30, 40, 50, 60
 };
 
 // PRE-COUNTED MOVES
@@ -220,11 +240,8 @@ u64 knight_moves[64];
 u64 king_moves[64];
 u64 rook_masks[64];
 u64 bishop_masks[64];
-u64 bishop_moves[64][512];
-u64 rook_moves[64][4096];
-u64 magic_rook[64];
-u64 magic_bishop[64];
-
+u64 bishop_moves[64][8192];
+u64 rook_moves[64][16384];
 
 // FUNCTIONS TO WORK WITH CONSTANTS
 char pieceType(u64 board, int square) {
@@ -329,7 +346,8 @@ void fillKnightMoves() {
     }
 }
 
-// SHIFTING PIECES
+// SLIDING PIECES
+
 void fillRookMasks() {
     u64 rook = 1;
     for (int i = 0; i < 64; i++) {
@@ -397,31 +415,17 @@ int countBits(u64 bitboard) {
     return count;
 }
 
-int get_ls1b_index(u64 bitboard) {
+int getLSBIndex(u64 bitboard) {
     if (bitboard != 0)
         return countBits((bitboard & -bitboard) - 1);
     else
         return -1;
 }
 
-u64 set_occupancy(int index, int bits_in_mask, u64 attack_mask) {
-    u64 occupancy = 0;
-    for (int count = 0; count < bits_in_mask; count++) {
-        int square = get_ls1b_index(attack_mask);
-        pop_bit(attack_mask, square);
-        if (index & (1 << count))
-            occupancy |= (1 << square);
-    }
-    return occupancy;
-}
-
-u64 bishop_attacks_on_the_fly(int square, u64 block) {
+u64 initBishopAttacks(int square, u64 block) {
     u64 attacks = 0ULL;
-
-
     int tr = square / 8;
     int tf = square % 8;
-
     int r, f;
     for (r = tr + 1, f = tf + 1; r <= 7 && f <= 7; r++, f++) {
         attacks |= (1ULL << (r * 8 + f));
@@ -445,7 +449,7 @@ u64 bishop_attacks_on_the_fly(int square, u64 block) {
     return attacks;
 }
 
-u64 rook_attacks_on_the_fly(int square, u64 block) {
+u64 initRookAttacks(int square, u64 block) {
 // attacks bitboard
     u64 attacks = 0ULL;
 
@@ -484,9 +488,9 @@ void fillRookMoves() {
         u64 mask = rook_masks[i];
         int variations = 1 << countBits(mask);
         for (int j = 0; j < variations; j++) {
-            u64 board = set_occupancy(j, countBits(mask), mask);
-            u64 ind = (board * magic_rook[i]) >> (64 - rook_bits[i]);
-            rook_moves[i][ind] = rook_attacks_on_the_fly(i, board);
+            u64 occupancy = _pdep_u64(j, rook_masks[i]);
+            u64 ind = _pext_u64(occupancy, rook_masks[i]);
+            rook_moves[i][ind] = initRookAttacks(i, occupancy);
         }
     }
 }
@@ -496,46 +500,143 @@ void fillBishopMoves() {
         u64 mask = bishop_masks[i];
         int variations = 1 << countBits(mask);
         for (int j = 0; j < variations; j++) {
-            u64 board = set_occupancy(j, countBits(mask), mask);
-            u64 ind = (board * magic_bishop[i]) >> (64 - rook_bits[i]);
-            bishop_moves[i][ind] = bishop_attacks_on_the_fly(i, board);
+            u64 occupancy = _pdep_u64(j, bishop_masks[i]);
+            u64 ind = _pext_u64(occupancy, bishop_masks[i]);
+            bishop_moves[i][ind] = initBishopAttacks(i, occupancy);
         }
     }
 }
 
 static inline u64 getBishopAttacks(int square, u64 occupancy) {
-    /*occupancy &= bishop_masks[square];
-    occupancy *=  magic_bishop[square];
-    occupancy >>= (64 - bishop_bits[square]);
-    return bishop_moves[square][occupancy];
-     */
-    return bishop_attacks_on_the_fly(square, occupancy);
-
+    return bishop_moves[square][_pext_u64(occupancy & bishop_masks[square], bishop_masks[square])];
 }
 
 static inline u64 getRookAttacks(int square, u64 occupancy) {
-/*occupancy &= rook_masks[square];
-occupancy *=  magic_rook[square];
-occupancy >>= (64 - rook_bits[square]);
-return rook_moves[square][occupancy];
- */
-    return rook_attacks_on_the_fly(square, occupancy);
+    return rook_moves[square][_pext_u64(occupancy & rook_masks[square], rook_masks[square])];
 }
 
 static inline u64 getQueenAttacks(int square, u64 occupancy) {
-    /*u64 occ_bishop = occupancy;
-    occ_bishop &= bishop_masks[square];
-    occ_bishop *=  magic_bishop[square];
-    occ_bishop >>= 64 - bishop_bits[square];
-    u64 occ_rook = occupancy;
-    occ_rook &= rook_masks[square];
-    occ_rook *=  magic_rook[square];
-    occ_rook >>= 64 - rook_bits[square];
-    return bishop_moves[square][occ_bishop] | rook_moves[square][occ_rook];
-     */
-    return bishop_attacks_on_the_fly(square, occupancy) | rook_attacks_on_the_fly(square, occupancy);
+    return getBishopAttacks(square, occupancy) | getRookAttacks(square, occupancy);
 }
 
+
+
+// ZOBRIST HASHING
+
+unsigned int random_state = 1804289383;
+
+unsigned int getRandomU32() {
+    unsigned int number = random_state;
+    number ^= number << 13;
+    number ^= number >> 17;
+    number ^= number << 5;
+    random_state = number;
+    return number;
+}
+
+u64 getRandomU64() {
+    u64 n1, n2, n3, n4;
+    n1 = (u64)(getRandomU32()) & 0xFFFF;
+    n2 = (u64)(getRandomU32()) & 0xFFFF;
+    n3 = (u64)(getRandomU32()) & 0xFFFF;
+    n4 = (u64)(getRandomU32()) & 0xFFFF;
+    return n1 | (n2 << 16) | (n3 << 32) | (n4 << 48);
+}
+
+u64 piece_keys[12][64];
+u64 enpassant_keys[64];
+u64 castle_keys[16];
+u64 color_key;
+
+void fillHashKeys() {
+    for (int i = P; i <= k; i++) {
+        for (int j = 0; j < 64; j++) {
+            piece_keys[i][j] = getRandomU64();
+        }
+    }
+    for (int i = 0; i< 64; i++) {
+        enpassant_keys[i] = getRandomU64();
+    }
+    for (int i = 0; i < 16; i++) {
+        castle_keys[i] = getRandomU64();
+    }
+    color_key = getRandomU64();
+}
+
+u64 generateHashKey(){
+    u64 hash_key = 0ULL;
+    for(int i=P;i<=k;i++){
+        u64 bitboard_copy = bitboards[i];
+        while(bitboard_copy){
+            int square = getLSBIndex(bitboard_copy);
+            pop_bit(bitboard_copy, square);
+            hash_key ^= piece_keys[i][square];
+        }
+    }
+    if(enpassant_square != empty_square){
+        hash_key ^= enpassant_keys[enpassant_square];
+    }
+    hash_key ^= castle_keys[castle];
+    if(move_color){
+        hash_key ^= color_key;
+    }
+    return hash_key;
+}
+
+// PRINT BOARDS
+
+void printBitboard(u64 board) {
+    string ranks[8];
+    for (int i = 7; i >= 0; i--) {
+        string s;
+        for (int j = 0; j < 8; j++) {
+            if (board % 2) {
+                s += "1 ";
+            } else {
+                s += ". ";
+            }
+            board /= 2;
+        }
+        ranks[i] = s;
+    }
+    for (int i = 0; i < 8; i++) {
+        cout << 8 - i << ' ' << ranks[i] << endl;
+    }
+    cout << "  a b c d e f g h " << endl;
+}
+
+void printBoard(u64 board = occupancies[2]) {
+    for (int i = P; i <= k; i++) {
+        board |= bitboards[i];
+    }
+    string ranks[8];
+    u64 board_copy = board;
+    for (int i = 7; i >= 0; i--) {
+        string s;
+        for (int j = 0; j < 8; j++) {
+            if (board % 2) {
+                s += pieceType(board_copy, 8 * (7 - i) + j);
+                s += ' ';
+            } else {
+                s += ". ";
+            }
+            board /= 2;
+        }
+        ranks[i] = s;
+    }
+    for (int i = 0; i < 8; i++) {
+        cout << 8 - i << ' ' << ranks[i] << endl;
+    }
+    cout << "  a b c d e f g h " << endl;
+    cout << "SIDE: " << (move_color ? "black" : "white") << endl;
+    cout << "EN PASSANT: " << (enpassant_square - 64 ? squareString(enpassant_square) : "no") << endl;
+    cout << "CASTLE: " << ((castle & wk) ? 'K' : '-') <<
+         ((castle & wq) ? 'Q' : '-') <<
+         ((castle & bk) ? 'k' : '-') <<
+         ((castle & bq) ? 'q' : '-') << endl;
+    hash_key = generateHashKey();
+    cout<<"HASH KEY: "<< hex << hash_key << dec << endl;
+}
 
 // EVERYTHING TO MOVE
 static inline bool isAttacked(int square, bool color) {
@@ -565,16 +666,17 @@ static inline int setMove(int source, int target, int piece, int promoted_piece,
         memcpy(occupancies_copy, occupancies, 24); \
         bool move_color_copy = move_color; \
         int enpassant_copy = enpassant_square; \
-        int castle_copy = castle;
+        int castle_copy = castle; \
+        u64 hash_key_copy = hash_key;
 
 #define restore_board memcpy(bitboards, bitboard_copy, 96); \
         memcpy(occupancies, occupancies_copy, 24); \
         move_color = move_color_copy; \
         enpassant_square = enpassant_copy; \
-        castle = castle_copy;
+        castle = castle_copy; \
+        hash_key = hash_key_copy; \
 
-
-static inline void generateMoves(vector<int> *moves) {
+static inline void generateMoves(vector<int> &moves) {
     int source, target;
     u64 bitboard, attacks;
     for (int i = P; i <= k; i++) {
@@ -582,37 +684,37 @@ static inline void generateMoves(vector<int> *moves) {
         if (!move_color) {
             if (i == P) {
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     target = source + 8;
                     if (target <= h8 && !get_bit(occupancies[2], target)) {
                         if (target >= a8) {
-                            moves->push_back(setMove(source, target, P, N, 0, 0, 0, 0));
-                            moves->push_back(setMove(source, target, P, B, 0, 0, 0, 0));
-                            moves->push_back(setMove(source, target, P, R, 0, 0, 0, 0));
-                            moves->push_back(setMove(source, target, P, Q, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, P, N, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, P, B, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, P, R, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, P, Q, 0, 0, 0, 0));
 
                         } else {
-                            moves->push_back(setMove(source, target, P, 0, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, P, 0, 0, 0, 0, 0));
                         }
                         if (source < a3 && source >= a2 && !get_bit(occupancies[2], (target + 8))) {
-                            moves->push_back(setMove(source, target + 8, P, 0, 0, 1, 0, 0));
+                            moves.push_back(setMove(source, target + 8, P, 0, 0, 1, 0, 0));
                         }
                     }
                     attacks = pawn_attacks[source][0] & (occupancies[1] | (1ULL << enpassant_square));
                     while (attacks) {
-                        int attack_square = get_ls1b_index(attacks);
+                        int attack_square = getLSBIndex(attacks);
                         if (get_bit(occupancies[1], attack_square)) {
                             if (attack_square >= a8) {
-                                moves->push_back(setMove(source, attack_square, P, N, 1, 0, 0, 0));
-                                moves->push_back(setMove(source, attack_square, P, B, 1, 0, 0, 0));
-                                moves->push_back(setMove(source, attack_square, P, R, 1, 0, 0, 0));
-                                moves->push_back(setMove(source, attack_square, P, Q, 1, 0, 0, 0));
+                                moves.push_back(setMove(source, attack_square, P, N, 1, 0, 0, 0));
+                                moves.push_back(setMove(source, attack_square, P, B, 1, 0, 0, 0));
+                                moves.push_back(setMove(source, attack_square, P, R, 1, 0, 0, 0));
+                                moves.push_back(setMove(source, attack_square, P, Q, 1, 0, 0, 0));
                             } else {
-                                moves->push_back(setMove(source, attack_square, P, 0, 1, 0, 0, 0));
+                                moves.push_back(setMove(source, attack_square, P, 0, 1, 0, 0, 0));
                             }
                         }
                         if (attack_square == enpassant_square) {
-                            moves->push_back(setMove(source, enpassant_square, P, 0, 1, 0, 1, 0));
+                            moves.push_back(setMove(source, enpassant_square, P, 0, 1, 0, 1, 0));
                         }
                         pop_bit(attacks, attack_square);
                     }
@@ -621,14 +723,14 @@ static inline void generateMoves(vector<int> *moves) {
             }
             if (i == N) {
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     attacks = knight_moves[source] & ~occupancies[0];
                     while (attacks) {
-                        target = get_ls1b_index(attacks);
+                        target = getLSBIndex(attacks);
                         if (!get_bit(occupancies[2], target)) {
-                            moves->push_back(setMove(source, target, N, 0, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, N, 0, 0, 0, 0, 0));
                         } else {
-                            moves->push_back(setMove(source, target, N, 0, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, N, 0, 1, 0, 0, 0));
                         }
                         pop_bit(attacks, target);
                     }
@@ -637,14 +739,14 @@ static inline void generateMoves(vector<int> *moves) {
             }
             if (i == B) {
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     attacks = getBishopAttacks(source, occupancies[2]) & ~occupancies[0];
                     while (attacks) {
-                        target = get_ls1b_index(attacks);
+                        target = getLSBIndex(attacks);
                         if (!get_bit(occupancies[2], target)) {
-                            moves->push_back(setMove(source, target, B, 0, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, B, 0, 0, 0, 0, 0));
                         } else {
-                            moves->push_back(setMove(source, target, B, 0, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, B, 0, 1, 0, 0, 0));
                         }
                         pop_bit(attacks, target);
                     }
@@ -653,14 +755,14 @@ static inline void generateMoves(vector<int> *moves) {
             }
             if (i == R) {
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     attacks = getRookAttacks(source, occupancies[2]) & ~occupancies[0];
                     while (attacks) {
-                        target = get_ls1b_index(attacks);
+                        target = getLSBIndex(attacks);
                         if (!get_bit(occupancies[2], target)) {
-                            moves->push_back(setMove(source, target, R, 0, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, R, 0, 0, 0, 0, 0));
                         } else {
-                            moves->push_back(setMove(source, target, R, 0, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, R, 0, 1, 0, 0, 0));
                         }
                         pop_bit(attacks, target);
                     }
@@ -669,14 +771,14 @@ static inline void generateMoves(vector<int> *moves) {
             }
             if (i == Q) {
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     attacks = getQueenAttacks(source, occupancies[2]) & ~occupancies[0];
                     while (attacks) {
-                        target = get_ls1b_index(attacks);
+                        target = getLSBIndex(attacks);
                         if (!get_bit(occupancies[2], target)) {
-                            moves->push_back(setMove(source, target, Q, 0, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, Q, 0, 0, 0, 0, 0));
                         } else {
-                            moves->push_back(setMove(source, target, Q, 0, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, Q, 0, 1, 0, 0, 0));
                         }
                         pop_bit(attacks, target);
                     }
@@ -686,23 +788,23 @@ static inline void generateMoves(vector<int> *moves) {
             if (i == K) {
                 if (castle & wk && !get_bit(occupancies[2], f1) && !get_bit(occupancies[2], g1) && !isAttacked(e1, 1) &&
                     !isAttacked(f1, 1) && !isAttacked(g1, 1)) {
-                    moves->push_back(setMove(e1, g1, K, 0, 0, 0, 0, 1));
+                    moves.push_back(setMove(e1, g1, K, 0, 0, 0, 0, 1));
                 }
                 if (castle & wq && !get_bit(occupancies[2], b1) && !get_bit(occupancies[2], c1) &&
                     !get_bit(occupancies[2], d1) && !isAttacked(c1, 1) && !isAttacked(d1, 1) &&
                     !isAttacked(e1, 1)) {
-                    moves->push_back(setMove(e1, c1, K, 0, 0, 0, 0, 1));
+                    moves.push_back(setMove(e1, c1, K, 0, 0, 0, 0, 1));
                 }
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     attacks = king_moves[source] & ~occupancies[0];
                     while (attacks) {
-                        target = get_ls1b_index(attacks);
+                        target = getLSBIndex(attacks);
                         if (!isAttacked(target, 1)) {
                             if (!get_bit(occupancies[2], target)) {
-                                moves->push_back(setMove(source, target, K, 0, 0, 0, 0, 0));
+                                moves.push_back(setMove(source, target, K, 0, 0, 0, 0, 0));
                             } else {
-                                moves->push_back(setMove(source, target, K, 0, 1, 0, 0, 0));
+                                moves.push_back(setMove(source, target, K, 0, 1, 0, 0, 0));
                             }
                         }
                         pop_bit(attacks, target);
@@ -713,36 +815,36 @@ static inline void generateMoves(vector<int> *moves) {
         } else {
             if (i == p) {
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     target = source - 8;
                     if (target >= a1 && !get_bit(occupancies[2], target)) {
                         if (target < a2) {
-                            moves->push_back(setMove(source, target, p, n, 1, 0, 0, 0));
-                            moves->push_back(setMove(source, target, p, b, 1, 0, 0, 0));
-                            moves->push_back(setMove(source, target, p, r, 1, 0, 0, 0));
-                            moves->push_back(setMove(source, target, p, q, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, p, n, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, p, b, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, p, r, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, p, q, 1, 0, 0, 0));
                         } else {
-                            moves->push_back(setMove(source, target, p, 0, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, p, 0, 0, 0, 0, 0));
                         }
                         if (source < a8 && source >= a7 && !get_bit(occupancies[2], (target - 8))) {
-                            moves->push_back(setMove(source, target - 8, p, 0, 0, 1, 0, 0));
+                            moves.push_back(setMove(source, target - 8, p, 0, 0, 1, 0, 0));
                         }
                     }
                     attacks = pawn_attacks[source][1] & (occupancies[0] | (1ULL << enpassant_square));
                     while (attacks) {
-                        int attack_square = get_ls1b_index(attacks);
+                        int attack_square = getLSBIndex(attacks);
                         if (get_bit(occupancies[0], attack_square)) {
                             if (attack_square < a2) {
-                                moves->push_back(setMove(source, attack_square, p, n, 1, 1, 0, 0));
-                                moves->push_back(setMove(source, attack_square, p, b, 1, 1, 0, 0));
-                                moves->push_back(setMove(source, attack_square, p, r, 1, 1, 0, 0));
-                                moves->push_back(setMove(source, attack_square, p, q, 1, 1, 0, 0));
+                                moves.push_back(setMove(source, attack_square, p, n, 1, 1, 0, 0));
+                                moves.push_back(setMove(source, attack_square, p, b, 1, 1, 0, 0));
+                                moves.push_back(setMove(source, attack_square, p, r, 1, 1, 0, 0));
+                                moves.push_back(setMove(source, attack_square, p, q, 1, 1, 0, 0));
                             } else {
-                                moves->push_back(setMove(source, attack_square, p, 0, 1, 0, 0, 0));
+                                moves.push_back(setMove(source, attack_square, p, 0, 1, 0, 0, 0));
                             }
                         }
                         if (attack_square == enpassant_square) {
-                            moves->push_back(setMove(source, enpassant_square, p, 0, 1, 0, 1, 0));
+                            moves.push_back(setMove(source, enpassant_square, p, 0, 1, 0, 1, 0));
                         }
                         pop_bit(attacks, attack_square);
                     }
@@ -751,14 +853,14 @@ static inline void generateMoves(vector<int> *moves) {
             }
             if (i == n) {
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     attacks = knight_moves[source] & ~occupancies[1];
                     while (attacks) {
-                        target = get_ls1b_index(attacks);
+                        target = getLSBIndex(attacks);
                         if (!get_bit(occupancies[2], target)) {
-                            moves->push_back(setMove(source, target, n, 0, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, n, 0, 0, 0, 0, 0));
                         } else {
-                            moves->push_back(setMove(source, target, n, 0, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, n, 0, 1, 0, 0, 0));
                         }
                         pop_bit(attacks, target);
                     }
@@ -767,14 +869,14 @@ static inline void generateMoves(vector<int> *moves) {
             }
             if (i == b) {
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     attacks = getBishopAttacks(source, occupancies[2]) & ~occupancies[1];
                     while (attacks) {
-                        target = get_ls1b_index(attacks);
+                        target = getLSBIndex(attacks);
                         if (!get_bit(occupancies[2], target)) {
-                            moves->push_back(setMove(source, target, b, 0, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, b, 0, 0, 0, 0, 0));
                         } else {
-                            moves->push_back(setMove(source, target, b, 0, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, b, 0, 1, 0, 0, 0));
                         }
                         pop_bit(attacks, target);
                     }
@@ -783,14 +885,14 @@ static inline void generateMoves(vector<int> *moves) {
             }
             if (i == r) {
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     attacks = getRookAttacks(source, occupancies[2]) & ~occupancies[1];
                     while (attacks) {
-                        target = get_ls1b_index(attacks);
+                        target = getLSBIndex(attacks);
                         if (!get_bit(occupancies[2], target)) {
-                            moves->push_back(setMove(source, target, r, 0, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, r, 0, 0, 0, 0, 0));
                         } else {
-                            moves->push_back(setMove(source, target, r, 0, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, r, 0, 1, 0, 0, 0));
                         }
                         pop_bit(attacks, target);
                     }
@@ -799,14 +901,14 @@ static inline void generateMoves(vector<int> *moves) {
             }
             if (i == q) {
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     attacks = getQueenAttacks(source, occupancies[2]) & ~occupancies[1];
                     while (attacks) {
-                        target = get_ls1b_index(attacks);
+                        target = getLSBIndex(attacks);
                         if (!get_bit(occupancies[2], target)) {
-                            moves->push_back(setMove(source, target, q, 0, 0, 0, 0, 0));
+                            moves.push_back(setMove(source, target, q, 0, 0, 0, 0, 0));
                         } else {
-                            moves->push_back(setMove(source, target, q, 0, 1, 0, 0, 0));
+                            moves.push_back(setMove(source, target, q, 0, 1, 0, 0, 0));
                         }
                         pop_bit(attacks, target);
                     }
@@ -816,22 +918,22 @@ static inline void generateMoves(vector<int> *moves) {
             if (i == k) {
                 if (castle & bk && !get_bit(occupancies[2], f8) && !get_bit(occupancies[2], g8) && !isAttacked(e8, 0) &&
                     !isAttacked(f8, 0) && !isAttacked(g8, 0)) {
-                    moves->push_back(setMove(e8, g8, k, 0, 0, 0, 0, 1));
+                    moves.push_back(setMove(e8, g8, k, 0, 0, 0, 0, 1));
                 }
                 if (castle & bq && !get_bit(occupancies[2], b8) && !get_bit(occupancies[2], c8) &&
                     !get_bit(occupancies[2], d8) && !isAttacked(c8, 0) && !isAttacked(d8, 0) && !isAttacked(e8, 0)) {
-                    moves->push_back(setMove(e8, c8, k, 0, 0, 0, 0, 1));
+                    moves.push_back(setMove(e8, c8, k, 0, 0, 0, 0, 1));
                 }
                 while (bitboard) {
-                    source = get_ls1b_index(bitboard);
+                    source = getLSBIndex(bitboard);
                     attacks = king_moves[source] & ~occupancies[1];
                     while (attacks) {
-                        target = get_ls1b_index(attacks);
+                        target = getLSBIndex(attacks);
                         if (!isAttacked(target, 0)) {
                             if (!get_bit(occupancies[2], target)) {
-                                moves->push_back(setMove(source, target, k, 0, 0, 0, 0, 0));
+                                moves.push_back(setMove(source, target, k, 0, 0, 0, 0, 0));
                             } else {
-                                moves->push_back(setMove(source, target, k, 0, 1, 0, 0, 0));
+                                moves.push_back(setMove(source, target, k, 0, 1, 0, 0, 0));
                             }
                         }
                         pop_bit(attacks, target);
@@ -892,6 +994,10 @@ static inline bool makeMove(int move, int only_captures) {
         set_bit(occupancies[move_color], target);
         pop_bit(occupancies[2], source);
         set_bit(occupancies[2], target);
+
+        hash_key ^= piece_keys[piece][source];
+        hash_key ^= piece_keys[piece][target];
+
         if (capture) {
             int start = move_color ? P : p;
             int end = move_color ? K : k;
@@ -899,6 +1005,7 @@ static inline bool makeMove(int move, int only_captures) {
                 if (get_bit(bitboards[i], target)) {
                     pop_bit(bitboards[i], target);
                     pop_bit(occupancies[!move_color], target);
+                    hash_key ^= piece_keys[i][target];
                     break;
                 }
             }
@@ -906,15 +1013,24 @@ static inline bool makeMove(int move, int only_captures) {
         if (promoted) {
             pop_bit(bitboards[piece], target);
             set_bit(bitboards[promoted], target);
+            hash_key ^= piece_keys[piece][target];
+            hash_key ^= piece_keys[promoted][target];
         }
         if (en_passant) {
             pop_bit(bitboards[move_color ? P : p], (move_color ? enpassant_square + 8 : enpassant_square - 8));
             pop_bit(occupancies[!move_color], (move_color ? enpassant_square + 8 : enpassant_square - 8));
             pop_bit(occupancies[2], (move_color ? enpassant_square + 8 : enpassant_square - 8));
+            hash_key ^= piece_keys[move_color ? P : p][move_color ? enpassant_square + 8 : enpassant_square - 8];
         }
-        enpassant_square = 64;
+        if(enpassant_square != empty_square){
+            hash_key ^= enpassant_keys[enpassant_square];
+        }
+
+        enpassant_square = empty_square;
+
         if (double_push) {
             enpassant_square = move_color ? target + 8 : target - 8;
+            hash_key ^= enpassant_keys[enpassant_square];
         }
         if (castling) {
             if (target == g1) {
@@ -924,6 +1040,8 @@ static inline bool makeMove(int move, int only_captures) {
                 set_bit(occupancies[0], f1);
                 pop_bit(occupancies[2], h1);
                 set_bit(occupancies[2], f1);
+                hash_key ^= piece_keys[R][h1];
+                hash_key ^= piece_keys[R][f1];
             } else if (target == c1) {
                 pop_bit(bitboards[R], a1);
                 set_bit(bitboards[R], d1);
@@ -931,6 +1049,8 @@ static inline bool makeMove(int move, int only_captures) {
                 set_bit(occupancies[0], d1);
                 pop_bit(occupancies[2], a1);
                 set_bit(occupancies[2], d1);
+                hash_key ^= piece_keys[R][a1];
+                hash_key ^= piece_keys[R][d1];
             } else if (target == g8) {
                 pop_bit(bitboards[r], h8);
                 set_bit(bitboards[r], f8);
@@ -938,6 +1058,8 @@ static inline bool makeMove(int move, int only_captures) {
                 set_bit(occupancies[1], f8);
                 pop_bit(occupancies[2], h8);
                 set_bit(occupancies[2], f8);
+                hash_key ^= piece_keys[r][h8];
+                hash_key ^= piece_keys[r][f8];
             } else if (target == c8) {
                 pop_bit(bitboards[r], a8);
                 set_bit(bitboards[r], d8);
@@ -945,12 +1067,26 @@ static inline bool makeMove(int move, int only_captures) {
                 set_bit(occupancies[1], d8);
                 pop_bit(occupancies[2], a8);
                 set_bit(occupancies[2], d8);
+                hash_key ^= piece_keys[r][a8];
+                hash_key ^= piece_keys[r][d8];
             }
         }
+
+        hash_key ^= castle_keys[castle];
         castle &= castling_rights[source];
         castle &= castling_rights[target];
+        hash_key ^= castle_keys[castle];
+
         move_color = !move_color;
-        if (isAttacked((move_color ? get_ls1b_index(bitboards[K]) : get_ls1b_index(bitboards[k])), move_color)) {
+        hash_key ^= color_key;
+
+        u64 current_hash = generateHashKey();
+        if(hash_key != current_hash){
+            printBoard();
+            cout<<"\nALERT YOUR HASH KEY SUCKS!!!\nIT HAS TO BE LIKE THIS: "<< hex << current_hash<<", BUT YOUR PROGRAM SAYS: "<<hash_key<<dec<<'\n';
+            getchar();
+        }
+        if (isAttacked((move_color ? getLSBIndex(bitboards[K]) : getLSBIndex(bitboards[k])), move_color)) {
             restore_board;
             return 0;
         } else {
@@ -959,65 +1095,14 @@ static inline bool makeMove(int move, int only_captures) {
 
     } else {
         if (getMoveCaptureFlag(move)) {
-            makeMove(move, 1);
+            makeMove(move, 0);
         } else {
             return 0;
         }
     }
 }
 
-// PRINT EVERYTHING NECESSARY
-
-void printBitboard(u64 board) {
-    string ranks[8];
-    for (int i = 7; i >= 0; i--) {
-        string s;
-        for (int j = 0; j < 8; j++) {
-            if (board % 2) {
-                s += "1 ";
-            } else {
-                s += ". ";
-            }
-            board /= 2;
-        }
-        ranks[i] = s;
-    }
-    for (int i = 0; i < 8; i++) {
-        cout << 8 - i << ' ' << ranks[i] << endl;
-    }
-    cout << "  a b c d e f g h " << endl;
-}
-
-void printBoard(u64 board = occupancies[2]) {
-    for (int i = P; i <= k; i++) {
-        board |= bitboards[i];
-    }
-    string ranks[8];
-    u64 board_copy = board;
-    for (int i = 7; i >= 0; i--) {
-        string s;
-        for (int j = 0; j < 8; j++) {
-            if (board % 2) {
-                s += pieceType(board_copy, 8 * (7 - i) + j);
-                s += ' ';
-            } else {
-                s += ". ";
-            }
-            board /= 2;
-        }
-        ranks[i] = s;
-    }
-    for (int i = 0; i < 8; i++) {
-        cout << 8 - i << ' ' << ranks[i] << endl;
-    }
-    cout << "  a b c d e f g h " << endl;
-    cout << "SIDE: " << (move_color ? "black" : "white") << endl;
-    cout << "EN PASSANT: " << (enpassant_square - 64 ? squareString(enpassant_square) : "no") << endl;
-    cout << "CASTLE: " << ((castle & wk) ? 'K' : '-') <<
-         ((castle & wq) ? 'Q' : '-') <<
-         ((castle & bk) ? 'k' : '-') <<
-         ((castle & bq) ? 'q' : '-') << endl;
-}
+// PRINT EVERYTHING NECESSARY (EXCEPT BOARDS)
 
 void printAttacks(bool color) {
     u64 result = 0;
@@ -1039,7 +1124,7 @@ void printFullMove(int move) {
 
 void printMove(int move) {
     cout << squareString(getMoveSource(move)) << squareString(getMoveTarget(move))
-         << (getMovePromotedPiece(move) ? name_string[getMovePromotedPiece(move)] : ' ') << endl;
+         << (getMovePromotedPiece(move) ? name_string[getMovePromotedPiece(move)] : ' ');
 }
 
 void printMoveList(vector<int> moves) {
@@ -1061,15 +1146,18 @@ static inline u64 perft(int depth) {
     }
     vector<int> move_list;
     u64 ans = 0;
-    generateMoves(&move_list);
+    generateMoves(move_list);
     for (int i = 0; i < move_list.size(); i++) {
         copy_board;
-
         if (!makeMove(move_list[i], 0)) {
             continue;
         }
         ans += perft(depth - 1);
         restore_board;
+        u64 current_hash = generateHashKey();
+        if(hash_key != current_hash){
+            cout<<"ALERT ALERT YOUR HASH KEY SUCKS!!!\nIT HAS TO BE LIKE THIS: "<<current_hash<<", BUT YOUR PROGRAM SAYS: "<<hash_key<<'\n';
+        }
     }
     return ans;
 }
@@ -1080,7 +1168,7 @@ static inline void perft_moves(int depth) {
     }
     vector<int> move_list;
     u64 ans_total = 0;
-    generateMoves(&move_list);
+    generateMoves(move_list);
     for (int i = 0; i < move_list.size(); i++) {
         copy_board;
         if (!makeMove(move_list[i], 0)) {
@@ -1096,32 +1184,300 @@ static inline void perft_moves(int depth) {
     cout << "Nodes: " << ans_total << endl;
 }
 
-// INTERFACE (MAYBE TO BE DONE LATER)
 
-int parse_move(string move_string) {
-    vector<int> move_list;
-    generateMoves(&move_list);
-    int source = (move_string[0] - 'a') + 8 * (move_string[1] - '1');
-    int target = (move_string[2] - 'a') + 8 * (move_string[3] - '1');
-    int promoted = 0;
-    for (int i = 0; i < move_list.size(); i++) {
-        if (getMoveSource(move_list[i]) == source && getMoveTarget(move_list[i]) == target) {
-            if(move_string.size() == 4) {
-                return move_list[i];
+// EVALUATION (NEEDED TO BE IMPROVED)
+
+static inline int evaluate() {
+    int score = 0;
+    for (int i = P; i <= k; i++) {
+        score += countBits(bitboards[i]) * evaluation_array[i];
+        u64 bitboard_copy = bitboards[i];
+        while (bitboard_copy) {
+            int square = getLSBIndex(bitboard_copy);
+            pop_bit(bitboard_copy, square);
+            switch (i) {
+                case P:
+                    score += pawn_eval[square];
+                    break;
+                case N:
+                    score += knight_eval[square];
+                    break;
+                case B:
+                    score += bishop_eval[square];
+                    break;
+                case R:
+                    score += rook_eval[square];
+                    break;
+                case Q:
+                    score += bishop_eval[square] + rook_eval[square];
+                    break;
+                case K:
+                    score += king_eval[square];
+                    break;
+                case p:
+                    score -= pawn_eval[rotated_board[square]];
+                    break;
+                case n:
+                    score -= knight_eval[rotated_board[square]];
+                    break;
+                case b:
+                    score -= bishop_eval[rotated_board[square]];
+                    break;
+                case r:
+                    score -= rook_eval[rotated_board[square]];
+                    break;
+                case q:
+                    score -= bishop_eval[rotated_board[square]] + rook_eval[rotated_board[square]];
+                    break;
+                case k:
+                    score -= king_eval[rotated_board[square]];
+                    break;
+                default:
+                    score += 0;
             }
-            if (getMovePromotedPiece(move_list[i]) == n ||
-                getMovePromotedPiece(move_list[i]) == N && move_string[4] == 'n'
-                || getMovePromotedPiece(move_list[i]) == b ||
-                getMovePromotedPiece(move_list[i]) == B && move_string[4] == 'b'
-                || getMovePromotedPiece(move_list[i]) == r ||
-                getMovePromotedPiece(move_list[i]) == R && move_string[4] == 'r'
-                || getMovePromotedPiece(move_list[i]) == q ||
-                getMovePromotedPiece(move_list[i]) == Q && move_string[4] == 'q')
-                return move_list[i];
         }
+    }
+    return move_color ? -score : score;
+}
+
+// SEARCHING BEST MOVES
+
+int best_move, ply;
+const int MAX_PLY = 64;
+int killers[2][MAX_PLY];
+int history[12][64];
+int follow_pv, score_pv;
+int MINIMUM_SCORE = -100000;
+int MAXIMUM_SCORE = 100000;
+int pv_length[MAX_PLY];
+int pv_table[MAX_PLY][MAX_PLY];
+
+
+static inline void enablePV(vector<int> &move_list) {
+    follow_pv = 0;
+    for (int i = 0; i < move_list.size(); i++) {
+        if (pv_table[0][ply] == move_list[i]) {
+            score_pv = 1;
+            follow_pv = 1;
+        }
+    }
+}
+
+static inline int moveScore(int move) {
+    if (score_pv) {
+        if (pv_table[0][ply] == move) {
+            score_pv = 0;
+            return 200;
+        }
+    }
+    if (getMoveCaptureFlag(move)) {
+        int source_piece = getMovePiece(move), captured_piece = P;
+        int start = move_color ? P : p, end = move_color ? K : k;
+        int target = getMoveTarget(move);
+        for (int i = start; i <= end; i++) {
+            if (get_bit(bitboards[i], target)) {
+                captured_piece = i;
+                break;
+            }
+        }
+        return mvv_lva[source_piece][captured_piece] + 100;
+    } else {
+        if (killers[0][ply] == move) {
+            return 90;
+        } else if (killers[1][ply] == move) {
+            return 80;
+        } else {
+            return history[getMovePiece(move)][getMoveTarget(move)];
+        }
+
     }
     return 0;
 }
+
+static inline void sortMoves(vector<int> &move_list) {
+    vector<pair<int, int>> captures, quite;
+    for (int i = 0; i < move_list.size(); i++) {
+        pair<int, int> pr;
+        pr.first = moveScore(move_list[i]);
+        pr.second = move_list[i];
+        if (pr.first != 0) {
+            captures.push_back(pr);
+        } else {
+            quite.push_back(pr);
+        }
+    }
+    sort(captures.begin(), captures.end());
+    reverse(captures.begin(), captures.end());
+    for (int i = 0; i < captures.size(); i++) {
+        move_list[i] = captures[i].second;
+    }
+    for (int i = captures.size(); i < move_list.size(); i++) {
+        move_list[i] = quite[i - captures.size()].second;
+    }
+}
+
+int nodes;
+
+static inline int quiescence(int alpha, int beta) {
+    nodes++;
+    int evaluation = evaluate();
+    if (evaluation >= beta) {
+        return beta;
+    }
+    if (evaluation > alpha) {
+        alpha = evaluation;
+    }
+    vector<int> move_list;
+    generateMoves(move_list);
+    sortMoves(move_list);
+
+    for (int i = 0; i < move_list.size(); i++) {
+        copy_board;
+        ply++;
+        if (makeMove(move_list[i], 1) == 0) {
+            ply--;
+            continue;
+        }
+        int score = -quiescence(-beta, -alpha);
+        restore_board;
+        ply--;
+        if (score >= beta) {
+            return beta;
+        }
+        if (score > alpha) {
+            alpha = score;
+        }
+    }
+    return alpha;
+}
+
+static inline int negamax(int alpha, int beta, int depth) {
+    int found_pv = 0;
+    pv_length[ply] = ply;
+    int current_best_move, alpha_copy = alpha;
+    if (depth <= 0) {
+        return quiescence(alpha, beta);
+    }
+    if (ply > MAX_PLY - 1) {
+        return evaluate();
+    }
+    bool in_check = isAttacked(move_color ? getLSBIndex(bitboards[k]) : getLSBIndex(bitboards[K]), !move_color);
+    nodes++;
+    if (depth >= 3 && !in_check && ply) {
+        copy_board;
+        move_color = !move_color;
+        enpassant_square = empty_square;
+        int score = -negamax(-beta, -beta + 1, depth - 3);
+        restore_board
+        if (score >= beta) {
+            return beta;
+        }
+    }
+    vector<int> move_list;
+    generateMoves(move_list);
+    if (follow_pv) {
+        enablePV(move_list);
+    }
+    int moves_searched = 0;
+    sortMoves(move_list);
+    int legal_moves = 0;
+
+    if (in_check) {
+        depth++;
+    }
+    for (int i = 0; i < move_list.size(); i++) {
+        copy_board;
+        ply++;
+        if (makeMove(move_list[i], 0) == 0) {
+            ply--;
+            continue;
+        }
+        legal_moves++;
+        int score;
+        if(found_pv){
+            score = -negamax(-alpha-1, -alpha, depth - 1);
+            if(score > alpha  && score < beta){
+                score = -negamax(-beta, -alpha, depth-1);
+            }
+        }
+        else{
+            score = -negamax(-beta, -alpha, depth-1);
+        }
+        ply--;
+        restore_board;
+
+        if (score >= beta) {
+            if (!getMoveCaptureFlag(move_list[i])) {
+                killers[1][ply] = killers[0][ply];
+                killers[0][ply] = move_list[i];
+            }
+            return beta;
+        }
+        if (score > alpha) {
+            if (!getMoveCaptureFlag(move_list[i])) {
+                history[getMovePiece(move_list[i])][getMoveTarget(move_list[i])] += depth;
+            }
+            alpha = score;
+            found_pv = 1;
+            pv_table[ply][ply] = move_list[i];
+            for (int j = ply + 1; j < pv_length[ply + 1]; j++) {
+                pv_table[ply][j] = pv_table[ply + 1][j];
+            }
+            pv_length[ply] = pv_length[ply + 1];
+            if (ply == 0) {
+                current_best_move = move_list[i];
+            }
+        }
+    }
+    if (legal_moves == 0) {
+        if (in_check) {
+            return MINIMUM_SCORE + 1000 + ply;
+        } else {
+            return 0;
+        }
+    }
+    if (alpha_copy != alpha) {
+        best_move = current_best_move;
+    }
+    return alpha;
+}
+
+int searchBest(int depth) {
+    follow_pv = 0;
+    score_pv = 0;
+    memset(killers, 0, sizeof(killers));
+    memset(history, 0, sizeof(history));
+    memset(pv_length, 0, sizeof(pv_length));
+    memset(pv_table, 0, sizeof(pv_table));
+    int alpha = MINIMUM_SCORE, beta = MAXIMUM_SCORE;
+    for (int i = 1; i <= depth; i++) {
+        follow_pv = 1;
+        int score = negamax(alpha, beta, i);
+        if ((score <= alpha) || (score >= beta)) {
+            alpha = MINIMUM_SCORE;
+            beta = MAXIMUM_SCORE;
+            continue;
+        }
+        alpha = score - 50;
+        beta = score + 50;
+        cout << "DEPTH: " << i << endl;
+        cout << "BEST MOVE: ";
+        printMove(best_move);
+        cout << endl;
+        cout << "BEST LINE: ";
+        for (int i = 0; i < pv_length[0]; i++) {
+            printMove(pv_table[0][i]);
+        }
+        cout << nodes << endl;
+        cout << endl;
+        if (i == depth) {
+            return score;
+        }
+    }
+}
+
+
+// INTERFACE (MAYBE TO BE DONE LATER)
 
 void setBoard(string fen) {
     for (int i = 0; i < 12; i++) {
@@ -1183,181 +1539,48 @@ void setBoard(string fen) {
         enpass += fen[i + 1];
         enpassant_square = stringSquare(enpass);
     }
-
+    // hash_key = generateHashKey();
     // 50 move rule in the future
 }
 
-// EVALUATION (NEEDED TO BE IMPROVED)
-
-static inline int evaluate(){
-    int score = 0;
-    for(int i=P; i<=k; i++){
-        score += countBits(bitboards[i]) * evaluation_array[i];
-        u64 bitboard_copy = bitboards[i];
-        while(bitboard_copy){
-            int square = get_ls1b_index(bitboard_copy);
-            pop_bit(bitboard_copy, square);
-            switch(i){
-                case P: score += pawn_eval[square];
-                    break;
-                case N: score += knight_eval[square];
-                    break;
-                case B: score += bishop_eval[square];
-                    break;
-                case R: score += rook_eval[square];
-                    break;
-                case Q: score += bishop_eval[square] + rook_eval[square];
-                    break;
-                case K: score += king_eval[square];
-                    break;
-                case p: score -= pawn_eval[rotated_board[square]];
-                    break;
-                case n: score -= knight_eval[rotated_board[square]];
-                    break;
-                case b: score -= bishop_eval[rotated_board[square]];
-                    break;
-                case r: score -= rook_eval[rotated_board[square]];
-                    break;
-                case q: score -= bishop_eval[rotated_board[square]] + rook_eval[rotated_board[square]];
-                    break;
-                case k: score -= king_eval[rotated_board[square]];
-                    break;
-                default:
-                    score += 0;
-            }
-        }
-    }
-    return move_color ? -score : score;
-}
-
-// SEARCHING BEST MOVES
-
-int best_move, node_depth;
-
-// bounds of minimal and maximal points possible (like -inf and inf)
-int MINIMUM_SCORE = -100000;
-int MAXIMUM_SCORE = 100000;
-
-static inline int negamax(int alpha, int beta, int depth){
-    int current_best_move, alpha_copy = alpha;
-    if(depth == 0) {
-        return evaluate();
-    }
+int parse_move(string move_string) {
     vector<int> move_list;
-    generateMoves(&move_list);
-    int legal_moves = 0;
-    int in_check = isAttacked(move_color ? get_ls1b_index(bitboards[k]) : get_ls1b_index(bitboards[K]), !move_color);
-
-    for(int i=0;i<move_list.size();i++){
-        copy_board;
-        node_depth++;
-        if(!makeMove(move_list[i], 0)){
-            node_depth--;
-            continue;
-        }
-        legal_moves++;
-        int score = -negamax(-beta, -alpha, depth - 1);
-        restore_board;
-        node_depth--;
-        if(score >= beta){
-            return beta;
-        }
-        if(score > alpha){
-            alpha = score;
-            if(node_depth == 0){
-                current_best_move = move_list[i];
+    generateMoves(move_list);
+    int source = (move_string[0] - 'a') + 8 * (move_string[1] - '1');
+    int target = (move_string[2] - 'a') + 8 * (move_string[3] - '1');
+    int promoted = 0;
+    for (int i = 0; i < move_list.size(); i++) {
+        if (getMoveSource(move_list[i]) == source && getMoveTarget(move_list[i]) == target) {
+            if (move_string.size() == 4) {
+                return move_list[i];
             }
+            if (getMovePromotedPiece(move_list[i]) == n ||
+                getMovePromotedPiece(move_list[i]) == N && move_string[4] == 'n'
+                || getMovePromotedPiece(move_list[i]) == b ||
+                getMovePromotedPiece(move_list[i]) == B && move_string[4] == 'b'
+                || getMovePromotedPiece(move_list[i]) == r ||
+                getMovePromotedPiece(move_list[i]) == R && move_string[4] == 'r'
+                || getMovePromotedPiece(move_list[i]) == q ||
+                getMovePromotedPiece(move_list[i]) == Q && move_string[4] == 'q')
+                return move_list[i];
         }
     }
-    if(legal_moves == 0){
-        if(in_check){
-            return MINIMUM_SCORE + 1000 + node_depth;
-        }
-        else{
-            return 0;
-        }
-    }
-    if(alpha_copy != alpha){
-        best_move = current_best_move;
-    }
-    return alpha;
+    return 0;
 }
 
-int searchBest(int depth){
-    int score = negamax(MINIMUM_SCORE, MAXIMUM_SCORE, depth);
-    cout<<"BEST MOVE: ";
-    printMove(best_move);
-    return score;
-}
+// INIT ALL MOVES
 
-// OTHER HELPFUL STUFF
-
-void loadData() {
-    freopen("bishop_masks.txt", "r", stdin);
-    for (int i = 0; i < 64; i++) {
-        cin >> bishop_masks[i];
-    }
-    freopen("rook_masks.txt", "r", stdin);
-    for (int i = 0; i < 64; i++) {
-        cin >> rook_masks[i];
-    }
-    freopen("king_moves.txt", "r", stdin);
-    for (int i = 0; i < 64; i++) {
-        cin >> king_moves[i];
-    }
-    freopen("knight_moves.txt", "r", stdin);
-    for (int i = 0; i < 64; i++) {
-        cin >> knight_moves[i];
-    }
-    freopen("magic_bishop.txt", "r", stdin);
-    for (int i = 0; i < 64; i++) {
-        cin >> magic_bishop[i];
-    }
-    freopen("pawn_attacks.txt", "r", stdin);
-    for (int i = 0; i < 64; i++) {
-        cin >> pawn_attacks[i][0];
-    }
-    for (int i = 0; i < 64; i++) {
-        cin >> pawn_attacks[i][1];
-    }
-    freopen("magic_rook.txt", "r", stdin);
-    for (int i = 0; i < 64; i++) {
-        cin >> magic_rook[i];
-    }
-
-    /*
-    freopen("rook_moves.txt", "r", stdin);
-    for(int i=0;i<64;i++){
-        for(int j=0;j<4096;j++){
-            cin>>rook_moves[i][j];
-        }
-    }
-    freopen("bishop_moves.txt", "r", stdin);
-    for(int i=0;i<64;i++){
-        for(int j=0;j<512;j++){
-            cin>>bishop_moves[i][j];
-        }
-    }
-    */
-}
-
-void fillAllMoves(){
+void fillAllMoves() {
     fillPawnAttacks();
     fillKingMoves();
     fillKnightMoves();
-    /*
+    fillRookMasks();
+    fillBishopMasks();
     fillRookMoves();
     fillBishopMoves();
-     */
 }
 
-
-// MAIN
-int main() {
-    //loadData();
-    fillAllMoves();
-    //freopen("output.txt", "w", stdout);
-    setBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+/*setBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     while(1){
         string move_string;
         int depth;
@@ -1371,6 +1594,42 @@ int main() {
         makeMove(move, 0);
         searchBest(depth);
         makeMove(best_move, 0);
+    }
+     */
+
+// MAIN
+int main() {
+    fillAllMoves();
+    fillHashKeys();
+    setBoard("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+    bool debug = 1;
+    if (debug) {
+        printBoard();
+        cout<<perft(4);
+    } else {
+        cout << "INPUT COLOR:\n";
+        string color;
+        cin >> color;
+        cout << "OK. LETS START!\n";
+        if (color == "white") {
+            int depth = 8;
+            searchBest(depth);
+            makeMove(best_move, 0);
+        }
+        while (1) {
+            string move_string;
+            int depth;
+            cin >> move_string >> depth;
+            copy_board
+            int move = parse_move(move_string);
+            if (move == 0) {
+                restore_board;
+                continue;
+            }
+            makeMove(move, 0);
+            searchBest(depth);
+            makeMove(best_move, 0);
+        }
     }
     return 0;
 }
