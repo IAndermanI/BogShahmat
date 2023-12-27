@@ -4,6 +4,19 @@
 #include "bitboards_and_constants.h"
 #include <x86intrin.h>
 
+extern __inline unsigned long long
+pdep_u64 (unsigned long long __X, unsigned long long __Y)
+{
+    return __builtin_ia32_pdep_di (__X, __Y);
+}
+
+extern __inline unsigned long long
+pext_u64 (unsigned long long __X, unsigned long long __Y)
+{
+    return __builtin_ia32_pext_di (__X, __Y);
+}
+
+
 // PRE-COUNTED MOVES
 u64 pawn_attacks[64][2];
 u64 knight_moves[64];
@@ -216,8 +229,8 @@ void fillRookMoves() {
         u64 mask = rook_masks[i];
         int variations = 1 << countBits(mask);
         for (int j = 0; j < variations; j++) {
-            u64 occupancy = _pdep_u64(j, rook_masks[i]);
-            u64 ind = _pext_u64(occupancy, rook_masks[i]);
+            u64 occupancy = pdep_u64(j, rook_masks[i]);
+            u64 ind = pext_u64(occupancy, rook_masks[i]);
             rook_moves[i][ind] = initRookAttacks(i, occupancy);
         }
     }
@@ -228,19 +241,19 @@ void fillBishopMoves() {
         u64 mask = bishop_masks[i];
         int variations = 1 << countBits(mask);
         for (int j = 0; j < variations; j++) {
-            u64 occupancy = _pdep_u64(j, bishop_masks[i]);
-            u64 ind = _pext_u64(occupancy, bishop_masks[i]);
+            u64 occupancy = pdep_u64(j, bishop_masks[i]);
+            u64 ind = pext_u64(occupancy, bishop_masks[i]);
             bishop_moves[i][ind] = initBishopAttacks(i, occupancy);
         }
     }
 }
 
 static inline u64 getBishopAttacks(int square, u64 occupancy) {
-    return bishop_moves[square][_pext_u64(occupancy & bishop_masks[square], bishop_masks[square])];
+    return bishop_moves[square][pext_u64(occupancy & bishop_masks[square], bishop_masks[square])];
 }
 
 static inline u64 getRookAttacks(int square, u64 occupancy) {
-    return rook_moves[square][_pext_u64(occupancy & rook_masks[square], rook_masks[square])];
+    return rook_moves[square][pext_u64(occupancy & rook_masks[square], rook_masks[square])];
 }
 
 static inline u64 getQueenAttacks(int square, u64 occupancy) {
