@@ -13,6 +13,11 @@ void printAttacks(bool color) {
     printBitboard(result);
 }
 
+string moveToString(int move) {
+    return squareString(getMoveSource(move)) + squareString(getMoveTarget(move)) +
+            (getMovePromotedPiece(move) ? name_string[getMovePromotedPiece(move)] : ' ');
+}
+
 void printFullMove(int move) {
     cout << "MOVE: " << squareString(getMoveSource(move)) << squareString(getMoveTarget(move))
          << (getMovePromotedPiece(move) ? name_string[getMovePromotedPiece(move)] : ' ') << endl;
